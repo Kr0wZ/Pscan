@@ -3,13 +3,11 @@
 
 import optparse
 import sys
-import re
 import socket
-import subprocess
 import time
-import random
 from scapy.all import *
 import prettytable
+import banners
 
 #Add python colors
 
@@ -19,7 +17,7 @@ class Pscan():
 		self.parser = None
 		self.host = None
 		self.hostname = "unknown"
-		self.port_range = None
+		self.port_range = None 
 		self.scan_type = None
 		self.supported_scan_types = ["syn", "xmas", "fin", "null", "tcp", "ping", "ack"]
 		self.supported_scan_types_short = ["S", "X", "F", "N", "T", "P", "A"]
@@ -29,6 +27,9 @@ class Pscan():
 		self.number_of_open_ports = 0
 		self.number_of_scanned_ports = 0
 		self.start_time = 0
+		self.aggressive_mode = False
+		self.socket = None
+		self.corresponding_ports_versions = None
 
 	#Build the parser
 	def build_opt_parser(self):
@@ -39,12 +40,17 @@ class Pscan():
 		self.parser.add_option("-p", "--port", dest="port_range", default="1-1024", action="callback", callback=self.check_port_range, type="string", help="Port(s) number(s) to scan (default is the first 1024 ports)")
 		self.parser.add_option("-s", "--scan", dest="scan_type", default="syn", action="callback", callback=self.check_scan_type, type="string", help="Type of scan. -h or --help to see the supported ones")
 		self.parser.add_option("-O", "--OS", dest="os_detection", default=False, action="store_true", help="Try to detect the scanning OS")
+		self.parser.add_option("-A", "--aggressive", dest="aggressive", default=False, action="store_true", help="Detect the ports versions")
 		#Verbose option just display content directly when it receives it. If not verbose the result is displayed at the end of scan
 		self.parser.add_option('-v', '--verbose', dest='verbose', default=False ,action='store_true', help='Verbose output')
 		#We modify the help to add more information at the end (epilog)
 		self.parser.add_option('-h', '--help', dest='help', action='store_true', help='Show this help and exit the program')
 
-		#Add an option for services verion
+		#Add an option for services version (create a new module to import "banner" with multiple functions inside for multiple ports (80, 443, 25 ...)).
+		#If banner option is set and if the type of port is not defined, then try to check the banner to identify the service running on the port.
+		#Example -> Port 2222 is SSH but it's not the basic port so it's not indicated in the ports list. With a regex for example, check is OpenSSH is inside the banner. If it is update 
+		#the name of the service running on the port
+
 		#Possibility to specify a network mask
 		#Add option to specify output file to write results
 		#Add option to specify input file if multiple hosts
@@ -83,6 +89,9 @@ class Pscan():
 
 		if((self.scan_type == "ping" or self.scan_type == "P") and self.port_range != None):
 			self.parser.error("Error you cannot specify a port when using ping scan. -h or --help for further informations")
+
+		if(options.aggressive):
+			self.aggressive_mode = True
 
 		if(len(args) != 0):
 			self.parser.error("Error unknown argument. Type -h or --help to see help")
@@ -201,9 +210,9 @@ class Pscan():
 		except(socket.herror):
 			self.hostname = "unknown"
 
-	#At the end of scan search the corresponding ports in the text file
+	#At the end of scan search the corresponding ports services in the text file
 	#Return a dict with the correct matches
-	def corresponding_ports(self):
+	def corresponding_ports_services(self):
 		services = {}
 		#Store the previous line if we don't find the port in the file and if the next line is greater than the researched one
 		previous_line = ""
@@ -222,6 +231,29 @@ class Pscan():
 						break
 
 		return services
+
+
+	def setup_ports_versions(self):
+		versions = {}
+
+		for port in self.open_ports:
+			versions[port] = ""
+
+		return versions
+
+	#Set the timeout for SYN scan depending of the number of ports to scan
+	#The timeout is used in case of the scan is too long
+	def set_timeout(self, number_ports):
+		if(number_ports <= 256):
+			return 1
+		if(number_ports <= 1024):
+			return 5
+		if(number_ports <= 15000):
+			return 40
+		if(number_ports <= 30000):
+			return 90
+		if(number_ports <= 65535):
+			return 360
 
 	def scan(self):
 
@@ -258,8 +290,8 @@ class Pscan():
 			tcp_layer = TCP(dport=ports, flags="S")
 			#Determine if there are multiple ports (range) or not
 			if(len(ports) > 1):
-				#How to define the correct timeout ? With the number of ports to scan ??? (if < 256 -> 5 seconds, if 1024 -> 10 seconds ???)
-				answer, unanswer = sr(ip_layer/tcp_layer, timeout=10, verbose=0)
+				timeout = self.set_timeout(len(ports))
+				answer, unanswer = sr(ip_layer/tcp_layer, timeout=timeout, verbose=0)
 				for frame in answer:
 					self.number_of_scanned_ports += 1
 					for layer in frame:
@@ -447,14 +479,24 @@ class Pscan():
 				print("Host is down")
 
 
+		self.corresponding_ports_versions = self.setup_ports_versions()
+
+		if(self.aggressive_mode):
+			self.socket = socket.socket()
+			banners.get_all_banners(self.host, self.open_ports, self.corresponding_ports_versions, self.socket)
+
 	def print_results(self):
+
 		table = prettytable.PrettyTable()
-		table.field_names = ["Port", "Status", "Name"]
+		table.field_names = ["Port", "Status", "Name", "Version"]
 
-		corresponding_ports = self.corresponding_ports()
+		corresponding_ports_services = self.corresponding_ports_services()
 
-		for port in corresponding_ports:
-			table.add_row([port, "open", corresponding_ports[port]])
+		#Update the services if some of them are on an unusual port number
+		corresponding_ports_services = banners.replace_service_banner(corresponding_ports_services, self.corresponding_ports_versions)
+
+		for port in corresponding_ports_services:
+			table.add_row([port, "open", corresponding_ports_services[port], self.corresponding_ports_versions[port]])
 
 		print("\n" + str(table))
 
