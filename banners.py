@@ -16,15 +16,19 @@ def get_http_banner(host):
 #Get the banner for a specific port
 #Works for ports 21,22 (at least)
 def get_banner(host, port, socket):
-	print("Get banner for port : " + str(port))
+	result = None
 	try:
 		#If can't connect to the port or host then timeout
 		socket.settimeout(10)
 		socket.connect((host, port))
-		return socket.recv(1024).decode().strip()
+		result = socket.recv(1024).decode().strip()
 	except:
-		print("Except")
 		pass
+
+	if(result != None):
+		return result
+	else:
+		return "Unknown version"
 
 def get_all_banners(host, open_ports, ports_versions, socket):
 	for port in open_ports:
@@ -41,11 +45,12 @@ def get_all_banners(host, open_ports, ports_versions, socket):
 
 #Return only the necessary part of the banner
 def parse_banner(banner):
-	if("FTP" in banner):
-		return banner.split("(")[1].split(")")[0]
-	#Return the default banner if there's nothing to change
-	else:
-		return banner
+	if(banner != None):
+		if("FTP" in banner):
+			return banner.split("(")[1].split(")")[0]
+		#Return the default banner if there's nothing to change
+		else:
+			return banner
 
 #Define and return the corresponding service to banner
 def check_service_banner(banner):

@@ -46,11 +46,8 @@ class Pscan():
 		#We modify the help to add more information at the end (epilog)
 		self.parser.add_option('-h', '--help', dest='help', action='store_true', help='Show this help and exit the program')
 
-		#Add an option for services version (create a new module to import "banner" with multiple functions inside for multiple ports (80, 443, 25 ...)).
-		#If banner option is set and if the type of port is not defined, then try to check the banner to identify the service running on the port.
-		#Example -> Port 2222 is SSH but it's not the basic port so it's not indicated in the ports list. With a regex for example, check is OpenSSH is inside the banner. If it is update 
-		#the name of the service running on the port
 
+		#For each scan, check if layer exists.
 		#Possibility to specify a network mask
 		#Add option to specify output file to write results
 		#Add option to specify input file if multiple hosts
@@ -501,11 +498,6 @@ class Pscan():
 		print("\n" + str(table))
 
 		print("\nScan finished in {:.2f} seconds - {} scanned port(s) - {} opened port(s)".format(time.time() - self.start_time, str(self.number_of_scanned_ports), str(self.number_of_open_ports)))
-		
-		#print(self.open_ports)
-		#print(self.corresponding_ports())
-	#Create function to print results
-
 
 
 if(__name__ == "__main__"):

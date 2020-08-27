@@ -138,6 +138,8 @@
 871 supfileserv
 873 rsync
 901 swat
+902 ISS-RealSecure-Sensor
+912 apex
 953 rndc
 992 telnets
 993 imaps
