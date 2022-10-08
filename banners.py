@@ -47,7 +47,10 @@ def get_all_banners(host, open_ports, ports_versions, socket):
 def parse_banner(banner):
 	if(banner != None):
 		if("FTP" in banner):
-			return banner.split("(")[1].split(")")[0]
+			try:
+                                return banner.split("(")[1].split(")")[0]
+                        except:
+                                return "Can't retrieve version"
 		#Return the default banner if there's nothing to change
 		else:
 			return banner
